@@ -45,12 +45,12 @@ class PongPlayer(PyGamePlayer):
         self.last_bar1_score = bar1_score
         self.last_bar2_score = bar2_score
 
-        return float(score_change)
+        return score_change
 
 
 if __name__ == '__main__':
     player = PongPlayer()
-    player.playing = True
+    player.start()
 
     # importing pong will start the game playing
     import games.pong
