@@ -12,11 +12,12 @@ Requirements
 Getting started
 -----------
 PyGame is probably the best supported library for games in Python it can be downloaded and installed from http://www.pygame.org/download.shtml
+
 Numpy is also required http://www.scipy.org/scipylib/download.html
 
 Create a Python 2 or 3 environment with both of these in it.
 
-import this project and whatever PyGame you want to train against into your working area.
+import this project and whatever PyGame game you want to train against into your working area. A bunch of PyGame games can be found here http://www.pygame.org/projects/6 or alternatly just use Pong or Tetris that are included with this project.
 
 Example usage for Pong game
 -----------
