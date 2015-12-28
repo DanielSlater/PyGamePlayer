@@ -5,7 +5,7 @@ import pygame.surfarray
 import pygame.key
 
 
-def function_intercept(intercepting_func, intercepted_func):
+def function_intercept(intercepted_func, intercepting_func):
     """
     Intercepts a method call and calls the supplied intercepting_func with the result of it's call and it's arguments
 
@@ -14,17 +14,18 @@ def function_intercept(intercepting_func, intercepted_func):
             # do work
             return result_of_real_event_get
 
-        pygame.event.get = function_intercept(get_event, pygame.event.get)
+        pygame.event.get = function_intercept(pygame.event.get, get_event)
 
-    :param intercepting_func:   The function that will get called, is supplied the return value of the intercepted_func
-                                as the first argument and
     :param intercepted_func: The function we are going to intercept
+    :param intercepting_func:   The function that will get called after the intercepted func. It is supplied the return
+    value of the intercepted_func as the first argument and it's args and kwargs.
     :return: a function that combines the intercepting and intercepted function, should normally be set to the
              intercepted_functions location
     """
+
     def wrap(*args, **kwargs):
-        real_results = intercepted_func(*args, **kwargs)
-        intercepted_results = intercepting_func(real_results, *args, **kwargs)
+        real_results = intercepted_func(*args, **kwargs)  # call the function we are intercepting and get it's result
+        intercepted_results = intercepting_func(real_results, *args, **kwargs)  # call our own function a
         return intercepted_results
 
     return wrap
@@ -77,9 +78,9 @@ class PyGamePlayer(object):
         self._default_update = pygame.display.update
         self._default_event_get = pygame.event.get
 
-        pygame.display.flip = function_intercept(self._on_screen_update, pygame.display.flip)
-        pygame.display.update = function_intercept(self._on_screen_update, pygame.display.update)
-        pygame.event.get = function_intercept(self._on_event_get, pygame.event.get)
+        pygame.display.flip = function_intercept(pygame.display.flip, self._on_screen_update)
+        pygame.display.update = function_intercept(pygame.display.update, self._on_screen_update)
+        pygame.event.get = function_intercept(pygame.event.get, self._on_event_get)
         self._playing = True
 
     def stop(self):
@@ -118,7 +119,7 @@ class PyGamePlayer(object):
 
             for type in args:
                 if type == QUIT:
-                    pass #never quit
+                    pass  # never quit
                 elif type == KEYUP:
                     result = result + key_up_events
                 elif type == KEYDOWN:

@@ -1,4 +1,4 @@
-from pygame.constants import K_DOWN
+from pygame.constants import K_LEFT
 from pygame_player import PyGamePlayer, function_intercept
 import games.tetris
 
@@ -17,14 +17,15 @@ class TetrisPlayer(PyGamePlayer):
             return lines_removed
 
         # to get the reward we will intercept the removeCompleteLines method and store what it returns
-        games.tetris.removeCompleteLines = function_intercept(add_removed_lines_to_reward, games.tetris.removeCompleteLines)
+        games.tetris.removeCompleteLines = function_intercept(games.tetris.removeCompleteLines,
+                                                              add_removed_lines_to_reward)
 
     def get_keys_pressed(self, screen_array, feedback):
         # TODO: put an actual learning agent here
         # toggle key presses so we get through the start menu
         if self._toggle_down_key:
             self._toggle_down_key = False
-            return [K_DOWN]
+            return [K_LEFT]
         else:
             self._toggle_down_key = True
             return []
