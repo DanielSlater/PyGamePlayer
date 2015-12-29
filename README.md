@@ -3,6 +3,8 @@ Module to help with running learning agents against PyGame games. Hooks into the
 
 Project contains two examples of running this one with Pong and one with Tetris.
 
+More information available here http://www.danielslater.net/2015/12/how-to-run-learning-agents-against.html
+
 Requirements
 ----------
 - python 2 or 3
@@ -27,7 +29,10 @@ from pygame_player import PyGamePlayer
 
 class PongPlayer(PyGamePlayer):
     def __init__(self):
-        super(PongPlayer, self).__init__()
+        super(PongPlayer, self).__init__(desired_fps=10) 
+        # desired_fps fixes the game clock so that no matter how many real seconds it takes to run a fame 
+        # the game behaves as if each frame took the same amount of time
+        
         self.last_bar1_score = 0.0
         self.last_bar2_score = 0.0
 
