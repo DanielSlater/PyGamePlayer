@@ -8,7 +8,7 @@ class TetrisPlayer(PyGamePlayer):
         """
         Example class for playing Tetris
         """
-        super(TetrisPlayer, self).__init__()
+        super(TetrisPlayer, self).__init__(desired_fps=5)
         self._toggle_down_key = True
         self._new_reward = 0.0
 
@@ -23,6 +23,7 @@ class TetrisPlayer(PyGamePlayer):
     def get_keys_pressed(self, screen_array, feedback):
         # TODO: put an actual learning agent here
         # toggle key presses so we get through the start menu
+
         if self._toggle_down_key:
             self._toggle_down_key = False
             return [K_LEFT]
