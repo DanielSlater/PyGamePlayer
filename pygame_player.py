@@ -80,12 +80,6 @@ class PyGamePlayer(object):
         if self._playing:
             raise Exception("Already playing")
 
-        self._default_flip = pygame.display.flip
-        self._default_update = pygame.display.update
-        self._default_event_get = pygame.event.get
-        self._default_time_clock = pygame.time.Clock
-        self._default_get_ticks = pygame.time.get_ticks
-
         pygame.display.flip = function_intercept(pygame.display.flip, self._on_screen_update)
         pygame.display.update = function_intercept(pygame.display.update, self._on_screen_update)
         pygame.event.get = function_intercept(pygame.event.get, self._on_event_get)
