@@ -1,5 +1,5 @@
 import pygame
-import numpy  # imports unused but required or we fail later
+import numpy  # import is unused but required or we fail later
 from pygame.constants import K_DOWN, KEYDOWN, KEYUP, QUIT
 import pygame.surfarray
 import pygame.key
@@ -32,20 +32,26 @@ def function_intercept(intercepted_func, intercepting_func):
 
 
 class PyGamePlayer(object):
-    def __init__(self):
+    def __init__(self, desired_fps=10):
         """
         Abstract class for learning agents, such as running reinforcement learning neural nets against PyGame games.
 
         The get_keys_pressed and get_feedback methods must be overriden by a subclass to use
 
         Call start method to start playing intercepting PyGame and training our machine
+        :param desired_fps: The number of frames per second we want the game running at.
+                            Useful if training the ai is too slow.
         """
+        self.desired_fps = desired_fps
         self._keys_pressed = []
         self._last_keys_pressed = []
         self._playing = False
         self._default_flip = pygame.display.flip
         self._default_update = pygame.display.update
         self._default_event_get = pygame.event.get
+        self._default_time_clock = pygame.time.Clock
+        self._default_get_ticks = pygame.time.get_ticks
+        self._game_time = 0.0
 
     def get_keys_pressed(self, screen_array, feedback):
         """
@@ -77,10 +83,16 @@ class PyGamePlayer(object):
         self._default_flip = pygame.display.flip
         self._default_update = pygame.display.update
         self._default_event_get = pygame.event.get
+        self._default_time_clock = pygame.time.Clock
+        self._default_get_ticks = pygame.time.get_ticks
 
         pygame.display.flip = function_intercept(pygame.display.flip, self._on_screen_update)
         pygame.display.update = function_intercept(pygame.display.update, self._on_screen_update)
         pygame.event.get = function_intercept(pygame.event.get, self._on_event_get)
+        pygame.time.Clock = function_intercept(pygame.time.Clock, self._on_time_clock)
+        pygame.time.get_ticks = function_intercept(pygame.time.get_ticks, self._get_game_time_ms)
+        #TODO: handle pygame.time.set_timer...
+
         self._playing = True
 
     def stop(self):
@@ -93,18 +105,31 @@ class PyGamePlayer(object):
         pygame.display.flip = self._default_flip
         pygame.display.update = self._default_update
         pygame.event.get = self._default_event_get
+        pygame.time.Clock = self._default_time_clock
+        pygame.time.get_ticks = self._default_get_ticks
 
         self._playing = False
 
-    def _on_screen_update(self, real_method_result, *args, **kwargs):
+    def _get_ms_per_frame(self):
+        return 1000.0 / self.desired_fps
+
+    def _get_game_time_ms(self):
+        return self._game_time
+
+    def _on_time_clock(self, _, *args, **kwargs):
+        return self._FixedFPSClock(self._get_ms_per_frame, self._game_time)
+
+    def _on_screen_update(self, _, *args, **kwargs):
         surface_array = pygame.surfarray.array3d(pygame.display.get_surface())
         reward = self.get_feedback()
         keys = self.get_keys_pressed(surface_array, reward)
         self._last_keys_pressed = self._keys_pressed
         self._keys_pressed = keys
-        return None
 
-    def _on_event_get(self, real_method_result, *args, **kwargs):
+        # now we have processed a frame increment the game timer
+        self._game_time += self._get_ms_per_frame()
+
+    def _on_event_get(self, _, *args, **kwargs):
         key_down_events = [pygame.event.Event(KEYDOWN, {"key": x})
                            for x in self._keys_pressed if x not in self._last_keys_pressed]
         key_up_events = [pygame.event.Event(KEYUP, {"key": x})
@@ -117,18 +142,17 @@ class PyGamePlayer(object):
             if hasattr(args[0], "__iter__"):
                 args = args[0]
 
-            for type in args:
-                if type == QUIT:
+            for type_filter in args:
+                if type_filter == QUIT:
                     pass  # never quit
-                elif type == KEYUP:
+                elif type_filter == KEYUP:
                     result = result + key_up_events
-                elif type == KEYDOWN:
+                elif type_filter == KEYDOWN:
                     result = result + key_down_events
         else:
             result = key_down_events + key_up_events
 
         return result
-
 
     @property
     def playing(self):
@@ -152,3 +176,23 @@ class PyGamePlayer(object):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop()
+
+    class _FixedFPSClock(object):
+        def __init__(self, get_seconds_per_frame_func, get_time_ms_func):
+            self._get_ms_per_frame_func = get_seconds_per_frame_func
+            self._get_time_ms_func = get_time_ms_func
+
+        def tick(self, _=None):
+            return self._get_ms_per_frame_func()
+
+        def tick_busy_loop(self, _=None):
+            return self._get_ms_per_frame_func()
+
+        def get_time(self):
+            return self._get_time_ms_func()
+
+        def get_raw_time(self):
+            return self._get_time_ms_func()
+
+        def get_fps(self):
+            return int(1.0/self._get_ms_per_frame_func())
