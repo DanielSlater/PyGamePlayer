@@ -11,7 +11,7 @@ class PongPlayer(PyGamePlayer):
         self.last_bar1_score = 0.0
         self.last_bar2_score = 0.0
 
-    def get_keys_pressed(self, screen_array, feedback):
+    def get_keys_pressed(self, screen_array, feedback, terminal):
         # TODO: put an actual learning agent here
         return [K_DOWN]
 
@@ -24,8 +24,7 @@ class PongPlayer(PyGamePlayer):
         self.last_bar1_score = bar1_score
         self.last_bar2_score = bar2_score
 
-        return float(score_change)
-
+        return float(score_change), False
 
 if __name__ == '__main__':
     player = PongPlayer()

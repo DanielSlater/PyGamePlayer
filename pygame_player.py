@@ -53,13 +53,14 @@ class PyGamePlayer(object):
         self._default_get_ticks = pygame.time.get_ticks
         self._game_time = 0.0
 
-    def get_keys_pressed(self, screen_array, feedback):
+    def get_keys_pressed(self, screen_array, feedback, terminal):
         """
         Called whenever the screen buffer is refreshed. returns the keys we want pressed in the next until the next
         screen refresh
 
         :param screen_array: 3d numpy.array of float. screen_width * screen_height * rgb
         :param feedback: result of call to get_feedback
+        :param terminal: boolean, True if we have reached a terminal state, meaning the next frame will be a restart
         :return: a list of the integer values of the keys we want pressed. See pygame.constants for values
         """
         raise NotImplementedError("Please override this method")
@@ -68,7 +69,9 @@ class PyGamePlayer(object):
         """
         Overriden method should hook into game events to give feeback to the learning agent
 
-        :return: value we want to give feedback, reward/punishment to our learning agent
+        :return: First = value we want to give as reward/punishment to our learning agent
+                 Second = Boolean true if we have reached a terminal state
+        :rtype: tuple (float, boolean)
         """
         raise NotImplementedError("Please override this method")
 
@@ -115,8 +118,8 @@ class PyGamePlayer(object):
 
     def _on_screen_update(self, _, *args, **kwargs):
         surface_array = pygame.surfarray.array3d(pygame.display.get_surface())
-        reward = self.get_feedback()
-        keys = self.get_keys_pressed(surface_array, reward)
+        reward, terminal = self.get_feedback()
+        keys = self.get_keys_pressed(surface_array, reward, terminal)
         self._last_keys_pressed = self._keys_pressed
         self._keys_pressed = keys
 
