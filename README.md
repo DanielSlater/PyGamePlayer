@@ -21,7 +21,7 @@ Create a Python 2 or 3 environment with both of these in it.
 
 Import this project and whatever PyGame game you want to train against into your working area. A bunch of PyGame games can be found here http://www.pygame.org/projects/6 or alternatly just use Pong or Tetris that are included with this project.
 
-The deep_q_pong_player also requires that tensorflow and matplotlib be installed
+exmples/deep_q_pong_player.py also requires that tensorflow and matplotlib be installed
 
 Example usage for Pong game
 -----------
