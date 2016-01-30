@@ -1,3 +1,4 @@
+#This is heavily based off https://github.com/asrivat1/DeepLearningVideoGames
 import random
 from collections import deque
 from pong_player import PongPlayer
@@ -16,7 +17,9 @@ class DeepQPongPlayer(PongPlayer):
     INITIAL_EPSILON = 1.0  # starting value of epsilon
     REPLAY_MEMORY = 590000  # number of previous transitions to remember
     BATCH = 32  # size of minibatch
-    K = 2  # only select an action every Kth frame, repeat prev for others
+    K = 4  # only select an action every Kth frame, repeat prev for others
+    STATE_FRAMES = 4  # number of frames to store in the state
+    RESIZED_SCREEN_X, RESIZED_SCREEN_Y = (80, 80)
 
     def __init__(self):
         super(DeepQPongPlayer, self).__init__()
@@ -45,16 +48,19 @@ class DeepQPongPlayer(PongPlayer):
 
     def get_keys_pressed(self, screen_array, reward, terminal):
         # scale down game image
-        screen_resized_grayscaled = cv2.cvtColor(cv2.resize(screen_array, (80, 80)), cv2.COLOR_BGR2GRAY)
+        screen_resized_grayscaled = cv2.cvtColor(cv2.resize(screen_array,
+                                                            (self.RESIZED_SCREEN_X, self.RESIZED_SCREEN_Y)),
+                                                 cv2.COLOR_BGR2GRAY)
         ret, screen_resized_grayscaled = cv2.threshold(screen_resized_grayscaled, 1, 255, cv2.THRESH_BINARY)
 
         # first frame must be handled differently
         if self._last_state is None:
-            self._last_state = np.stack((screen_resized_grayscaled, screen_resized_grayscaled,
-                                         screen_resized_grayscaled, screen_resized_grayscaled), axis=2)
+            # the _last_state will contain the image data from the last self.STATE_FRAMES(4) frames
+            self._last_state = np.stack(tuple(screen_resized_grayscaled for _ in range(self.STATE_FRAMES)), axis=2)
             return DeepQPongPlayer._key_presses_from_action(self._last_action)
 
-        screen_resized_grayscaled = np.reshape(screen_resized_grayscaled, (80, 80, 1))
+        screen_resized_grayscaled = np.reshape(screen_resized_grayscaled,
+                                               (self.RESIZED_SCREEN_X, self.RESIZED_SCREEN_Y, 1))
         current_state = np.append(screen_resized_grayscaled, self._last_state[:, :, 1:], axis=2)
 
         # store the transition in previous_observations
@@ -152,7 +158,7 @@ class DeepQPongPlayer(PongPlayer):
 
     def _create_network(self):
         # network weights
-        convolution_weights_1 = DeepQPongPlayer._weight_variable([8, 8, 4, 32])
+        convolution_weights_1 = DeepQPongPlayer._weight_variable([8, 8, self.STATE_FRAMES, 32])
         convolution_bias_1 = DeepQPongPlayer._bias_variable([32])
 
         convolution_weights_2 = DeepQPongPlayer._weight_variable([4, 4, 32, 64])
@@ -168,7 +174,7 @@ class DeepQPongPlayer(PongPlayer):
         feed_forward_bias_2 = DeepQPongPlayer._bias_variable([self.ACTIONS])
 
         # input layer
-        input = tf.placeholder("float", [None, 80, 80, 4])
+        input = tf.placeholder("float", [None, self.RESIZED_SCREEN_X, self.RESIZED_SCREEN_Y, self.STATE_FRAMES])
 
         # hidden layers
         h_conv1 = tf.nn.relu(DeepQPongPlayer._conv2d(input, convolution_weights_1, 4) + convolution_bias_1)
