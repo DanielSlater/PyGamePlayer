@@ -31,9 +31,10 @@ from pygame_player import PyGamePlayer
 
 class PongPlayer(PyGamePlayer):
     def __init__(self):
-        super(PongPlayer, self).__init__(desired_fps=10) 
-        # desired_fps fixes the game clock so that no matter how many real seconds it takes to run a fame 
+        super(PongPlayer, self).__init__(force_game_fps=10) 
+        # force_game_fps fixes the game clock so that no matter how many real seconds it takes to run a fame 
         # the game behaves as if each frame took the same amount of time
+        # use run_real_time so the game will actually play at the force_game_fps frame rate
         
         self.last_bar1_score = 0.0
         self.last_bar2_score = 0.0
