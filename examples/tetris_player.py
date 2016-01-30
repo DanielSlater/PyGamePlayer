@@ -8,7 +8,7 @@ class TetrisPlayer(PyGamePlayer):
         """
         Example class for playing Tetris
         """
-        super(TetrisPlayer, self).__init__(desired_fps=5)
+        super(TetrisPlayer, self).__init__(force_game_fps=5)
         self._toggle_down_key = True
         self._new_reward = 0.0
         self._terminal = False

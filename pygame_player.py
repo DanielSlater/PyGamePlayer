@@ -32,17 +32,23 @@ def function_intercept(intercepted_func, intercepting_func):
 
 
 class PyGamePlayer(object):
-    def __init__(self, desired_fps=10):
+    def __init__(self, force_game_fps=10, run_real_time=False):
         """
         Abstract class for learning agents, such as running reinforcement learning neural nets against PyGame games.
 
         The get_keys_pressed and get_feedback methods must be overriden by a subclass to use
 
         Call start method to start playing intercepting PyGame and training our machine
-        :param desired_fps: The number of frames per second we want the game running at.
-                            Useful if training the ai is too slow.
+        :param force_game_fps: Fixes the pygame timer functions so the ai will get input as if it were running at this
+                               fps
+        :type force_game_fps: int
+        :param run_real_time: If True the game will actually run at the force_game_fps speed
+        :type run_real_time: bool
         """
-        self.desired_fps = desired_fps
+        self.force_game_fps = force_game_fps
+        """Fixes the pygame timer functions so the ai will get input as if it were running at this fps"""
+        self.run_real_time = run_real_time
+        """If True the game will actually run at the force_game_fps speed"""
         self._keys_pressed = []
         self._last_keys_pressed = []
         self._playing = False
@@ -87,8 +93,8 @@ class PyGamePlayer(object):
         pygame.display.update = function_intercept(pygame.display.update, self._on_screen_update)
         pygame.event.get = function_intercept(pygame.event.get, self._on_event_get)
         pygame.time.Clock = function_intercept(pygame.time.Clock, self._on_time_clock)
-        pygame.time.get_ticks = function_intercept(pygame.time.get_ticks, self._get_game_time_ms)
-        #TODO: handle pygame.time.set_timer...
+        pygame.time.get_ticks = function_intercept(pygame.time.get_ticks, self.get_game_time_ms)
+        # TODO: handle pygame.time.set_timer...
 
         self._playing = True
 
@@ -107,14 +113,31 @@ class PyGamePlayer(object):
 
         self._playing = False
 
-    def _get_ms_per_frame(self):
-        return 1000.0 / self.desired_fps
+    @property
+    def playing(self):
+        """
+        Returns if we are in a state where we are playing/intercepting PyGame calls
+        :return: boolean
+        """
+        return self._playing
 
-    def _get_game_time_ms(self):
+    @playing.setter
+    def playing(self, value):
+        if self._playing == value:
+            return
+        if self._playing:
+            self.stop()
+        else:
+            self.start()
+
+    def get_ms_per_frame(self):
+        return 1000.0 / self.force_game_fps
+
+    def get_game_time_ms(self):
         return self._game_time
 
-    def _on_time_clock(self, _, *args, **kwargs):
-        return self._FixedFPSClock(self._get_ms_per_frame, self._game_time)
+    def _on_time_clock(self, real_clock, *args, **kwargs):
+        return self._FixedFPSClock(self, real_clock)
 
     def _on_screen_update(self, _, *args, **kwargs):
         surface_array = pygame.surfarray.array3d(pygame.display.get_surface())
@@ -124,7 +147,7 @@ class PyGamePlayer(object):
         self._keys_pressed = keys
 
         # now we have processed a frame increment the game timer
-        self._game_time += self._get_ms_per_frame()
+        self._game_time += self.get_ms_per_frame()
 
     def _on_event_get(self, _, *args, **kwargs):
         key_down_events = [pygame.event.Event(KEYDOWN, {"key": x})
@@ -151,45 +174,35 @@ class PyGamePlayer(object):
 
         return result
 
-    @property
-    def playing(self):
-        """
-        Returns if we are in a state where we are playing/intercepting PyGame calls
-        :return: boolean
-        """
-        return self._playing
-
-    @playing.setter
-    def playing(self, value):
-        if self._playing == value:
-            return
-        if self._playing:
-            self.stop()
-        else:
-            self.start()
-
     def __enter__(self):
         self.start()
+        return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop()
 
     class _FixedFPSClock(object):
-        def __init__(self, get_seconds_per_frame_func, get_time_ms_func):
-            self._get_ms_per_frame_func = get_seconds_per_frame_func
-            self._get_time_ms_func = get_time_ms_func
+        def __init__(self, pygame_player, real_clock):
+            self._pygame_player = pygame_player
+            self._real_clock = real_clock
 
         def tick(self, _=None):
-            return self._get_ms_per_frame_func()
+            if self._pygame_player.run_real_time:
+                return self._real_clock.tick(self._pygame_player.force_game_fps)
+            else:
+                return self._pygame_player.get_ms_per_frame()
 
         def tick_busy_loop(self, _=None):
-            return self._get_ms_per_frame_func()
+            if self._pygame_player.run_real_time:
+                return self._real_clock.tick_busy_loop(self._pygame_player.force_game_fps)
+            else:
+                return self._pygame_player.get_ms_per_frame()
 
         def get_time(self):
-            return self._get_time_ms_func()
+            return self._pygame_player.get_game_time_ms()
 
         def get_raw_time(self):
-            return self._get_time_ms_func()
+            return self._pygame_player.get_game_time_ms()
 
         def get_fps(self):
-            return int(1.0/self._get_ms_per_frame_func())
+            return int(1.0 / self._pygame_player.get_ms_per_frame())
