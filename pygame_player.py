@@ -32,7 +32,7 @@ def function_intercept(intercepted_func, intercepting_func):
 
 
 class PyGamePlayer(object):
-    def __init__(self, force_game_fps=10, run_real_time=False):
+    def __init__(self, force_game_fps=10, run_real_time=False, pass_quit_event=True):
         """
         Abstract class for learning agents, such as running reinforcement learning neural nets against PyGame games.
 
@@ -49,6 +49,8 @@ class PyGamePlayer(object):
         """Fixes the pygame timer functions so the ai will get input as if it were running at this fps"""
         self.run_real_time = run_real_time
         """If True the game will actually run at the force_game_fps speed"""
+        self.pass_quit_event = pass_quit_event
+        """Decides whether the quit event should be passed on to the game"""
         self._keys_pressed = []
         self._last_keys_pressed = []
         self._playing = False
@@ -164,13 +166,23 @@ class PyGamePlayer(object):
 
             for type_filter in args:
                 if type_filter == QUIT:
-                    pass  # never quit
+                    if type_filter == QUIT:
+                        if self.pass_quit_event:
+                            for e in _:
+                                if e.type == QUIT:
+                                    result.append(e)
+                    else:
+                        pass  # never quit
                 elif type_filter == KEYUP:
                     result = result + key_up_events
                 elif type_filter == KEYDOWN:
                     result = result + key_down_events
         else:
             result = key_down_events + key_up_events
+            if self.pass_quit_event:
+                for e in _:
+                    if e.type == QUIT:
+                        result.append(e)
 
         return result
 
