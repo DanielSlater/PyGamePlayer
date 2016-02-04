@@ -44,6 +44,8 @@ class PyGamePlayer(object):
         :type force_game_fps: int
         :param run_real_time: If True the game will actually run at the force_game_fps speed
         :type run_real_time: bool
+        :param pass_quit_event: If True the ai will be asked for the quit event
+        :type pass_quit_event: bool
         """
         self.force_game_fps = force_game_fps
         """Fixes the pygame timer functions so the ai will get input as if it were running at this fps"""
