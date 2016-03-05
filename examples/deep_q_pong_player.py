@@ -153,13 +153,11 @@ class DeepQPongPlayer(PongPlayer):
         feed_forward_weights_2 = DeepQPongPlayer._weight_variable([512, DeepQPongPlayer.ACTIONS_COUNT])
         feed_forward_bias_2 = DeepQPongPlayer._bias_variable([DeepQPongPlayer.ACTIONS_COUNT])
 
-        # input layer
-        input_placeholder = tf.placeholder("float", [None, DeepQPongPlayer.RESIZED_SCREEN_X, DeepQPongPlayer.RESIZED_SCREEN_Y,
+        input_layer = tf.placeholder("float", [None, DeepQPongPlayer.RESIZED_SCREEN_X, DeepQPongPlayer.RESIZED_SCREEN_Y,
                                                      DeepQPongPlayer.STATE_FRAMES])
 
-        # hidden layers
         hidden_convolutional_layer_1 = tf.nn.relu(
-            DeepQPongPlayer._convolution_2d(input_placeholder, convolution_weights_1, 4) + convolution_bias_1)
+            DeepQPongPlayer._convolution_2d(input_layer, convolution_weights_1, 4) + convolution_bias_1)
 
         hidden_max_pooling_layer = DeepQPongPlayer._max_pool_2x2(hidden_convolutional_layer_1)
 
@@ -175,10 +173,9 @@ class DeepQPongPlayer(PongPlayer):
         final_hidden_activations = tf.nn.relu(
             tf.matmul(hidden_convolutional_layer_3_flat, feed_forward_weights_1) + feed_forward_bias_1)
 
-        # readout layer
-        readout = tf.matmul(final_hidden_activations, feed_forward_weights_2) + feed_forward_bias_2
+        output_layer = tf.matmul(final_hidden_activations, feed_forward_weights_2) + feed_forward_bias_2
 
-        return input_placeholder, readout, final_hidden_activations
+        return input_layer, output_layer, final_hidden_activations
 
     @staticmethod
     def _key_presses_from_action(action_set):
