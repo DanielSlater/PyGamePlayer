@@ -1,4 +1,4 @@
-#This is heavily based off https://github.com/asrivat1/DeepLearningVideoGames
+# This is heavily based off https://github.com/asrivat1/DeepLearningVideoGames
 import random
 from collections import deque
 from pong_player import PongPlayer
@@ -9,24 +9,25 @@ from pygame.constants import K_DOWN, K_UP
 
 
 class DeepQPongPlayer(PongPlayer):
-    ACTIONS = 3  # number of valid actions
-    GAMMA = 0.99  # decay rate of past observations
-    OBSERVE = 500000.  # timesteps to observe before training
-    EXPLORE = 2000000.  # frames over which to anneal epsilon
-    FINAL_EPSILON = 0.05  # final value of epsilon
-    INITIAL_EPSILON = 1.0  # starting value of epsilon
+    ACTIONS_COUNT = 3  # number of valid actions. In this case up, still and down
+    FUTURE_REWARD_DISCOUNT = 0.99  # decay rate of past observations
+    OBSERVATION_STEPS = 500000.  # time steps to observe before training
+    EXPLORE_STEPS = 2000000.  # frames over which to anneal epsilon
+    INITIAL_RANDOM_ACTION_PROB = 1.0  # starting chance of an action being random
+    FINAL_RANDOM_ACTION_PROD = 0.05  # final chance of an action being random
     REPLAY_MEMORY = 590000  # number of previous transitions to remember
-    BATCH = 32  # size of minibatch
-    K = 4  # only select an action every Kth frame, repeat prev for others
+    MINI_BATCH_SIZE = 32  # size of mini batches
+    FRAMES_PER_ACTION = 4  # only select a new action every x frames, repeat prev for others
     STATE_FRAMES = 4  # number of frames to store in the state
     RESIZED_SCREEN_X, RESIZED_SCREEN_Y = (80, 80)
+    OBS_LAST_STATE_INDEX, OBS_ACTION_INDEX, OBS_REWARD_INDEX, OBS_CURRENT_STATE_INDEX, OBS_TERMINAL_INDEX = range(5)
 
     def __init__(self):
         super(DeepQPongPlayer, self).__init__()
         self._session = tf.InteractiveSession()
-        self._input_layer, self._output_layer, hidden_activations = self._create_network()
+        self._input_layer, self._output_layer, hidden_activations = self._create_network
 
-        self._action = tf.placeholder("float", [None, self.ACTIONS])
+        self._action = tf.placeholder("float", [None, self.ACTIONS_COUNT])
         self._output = tf.placeholder("float", [None])
         readout_action = tf.reduce_sum(tf.mul(self._output_layer, self._action), reduction_indices=1)
         cost = tf.reduce_mean(tf.square(self._output - readout_action))
@@ -36,11 +37,11 @@ class DeepQPongPlayer(PongPlayer):
         self._previous_observations = deque()
 
         # set the first action to do nothing
-        self._last_action = np.zeros(self.ACTIONS)
+        self._last_action = np.zeros(self.ACTIONS_COUNT)
         self._last_action[1] = 1
 
         self._last_state = None
-        self._epsilon = self.INITIAL_EPSILON
+        self._probability_of_random_action = self.INITIAL_RANDOM_ACTION_PROB
         self._time = 0
         self._frames_since_last_action = 0
 
@@ -51,6 +52,8 @@ class DeepQPongPlayer(PongPlayer):
         screen_resized_grayscaled = cv2.cvtColor(cv2.resize(screen_array,
                                                             (self.RESIZED_SCREEN_X, self.RESIZED_SCREEN_Y)),
                                                  cv2.COLOR_BGR2GRAY)
+
+        # set the grayscale to have values in the 0.0 to 1.0 range
         ret, screen_resized_grayscaled = cv2.threshold(screen_resized_grayscaled, 1, 255, cv2.THRESH_BINARY)
 
         # first frame must be handled differently
@@ -71,62 +74,108 @@ class DeepQPongPlayer(PongPlayer):
 
         self._frames_since_last_action += 1
 
-        if self._frames_since_last_action < self.K:
-            # just repeat the last action until we hit another recalc point
-            return DeepQPongPlayer._key_presses_from_action(self._last_action)
-        else:
+        if self._frames_since_last_action >= self.FRAMES_PER_ACTION:
+            # select a new action
             self._frames_since_last_action = 0
 
             # only train if done observing
-            if self._time > self.OBSERVE:
+            if self._time > self.OBSERVATION_STEPS:
                 self._train()
 
             # update the old values
             self._last_state = current_state
             self._time += 1
 
-            self._last_action = self._get_new_action()
+            self._last_action = self._choose_next_action()
 
-            # scale down epsilon
-            if self._epsilon > self.FINAL_EPSILON and self._time > self.OBSERVE:
-                self._epsilon -= (self.INITIAL_EPSILON - self.FINAL_EPSILON) / self.EXPLORE
+            # scale down probability of random action
+            if self._probability_of_random_action > self.FINAL_RANDOM_ACTION_PROD \
+                    and self._time > self.OBSERVATION_STEPS:
+                self._probability_of_random_action -= (self.INITIAL_RANDOM_ACTION_PROB - self.FINAL_RANDOM_ACTION_PROD) \
+                                                      / self.EXPLORE_STEPS
 
-            return DeepQPongPlayer._key_presses_from_action(self._last_action)
+        return DeepQPongPlayer._key_presses_from_action(self._last_action)
 
-    def _get_new_action(self):
-        readout_t = self._output_layer.eval(feed_dict={self._input_layer: [self._last_state]})[0]
-        new_action = np.zeros([self.ACTIONS])
-        if self._time <= self.OBSERVE or random.random() <= self._epsilon:
-            action_index = random.randrange(self.ACTIONS)
-            new_action[action_index] = 1
+    def _choose_next_action(self):
+        new_action = np.zeros([self.ACTIONS_COUNT])
+
+        if self._time <= self.OBSERVATION_STEPS or random.random() <= self._probability_of_random_action:
+            # choose an action randomly
+            action_index = random.randrange(self.ACTIONS_COUNT)
         else:
+            # choose an action given our last state
+            readout_t = self._output_layer.eval(feed_dict={self._input_layer: [self._last_state]})[0]
             action_index = np.argmax(readout_t)
-            new_action[action_index] = 1
 
+        new_action[action_index] = 1
         return new_action
 
     def _train(self):
-        # sample a minibatch to train on
-        minibatch = random.sample(self._previous_observations, self.BATCH)
+        # sample a mini_batch to train on
+        mini_batch = random.sample(self._previous_observations, self.MINI_BATCH_SIZE)
         # get the batch variables
-        s_j_batch = [d[0] for d in minibatch]
-        a_batch = [d[1] for d in minibatch]
-        r_batch = [d[2] for d in minibatch]
-        s_j1_batch = [d[3] for d in minibatch]
-        y_batch = []
-        readout_j1_batch = self._output_layer.eval(feed_dict={self._input_layer: s_j1_batch})
-        for i in range(0, len(minibatch)):
-            # if terminal only equals reward
-            if minibatch[i][4]:
-                y_batch.append(r_batch[i])
+        last_states_batch = [d[self.OBS_LAST_STATE_INDEX] for d in mini_batch]
+        actions_batch = [d[self.OBS_ACTION_INDEX] for d in mini_batch]
+        rewards_batch = [d[self.OBS_REWARD_INDEX] for d in mini_batch]
+        current_states_batch = [d[self.OBS_CURRENT_STATE_INDEX] for d in mini_batch]
+        targets_batch = []
+        predicted_future_reward = self._output_layer.eval(feed_dict={self._input_layer: current_states_batch})
+        for i in range(len(mini_batch)):
+            if mini_batch[i][self.OBS_TERMINAL_INDEX]:
+                # this was a terminal frame so need so scale future reward...
+                targets_batch.append(rewards_batch[i])
             else:
-                y_batch.append(r_batch[i] + self.GAMMA * np.max(readout_j1_batch[i]))
+                targets_batch.append(rewards_batch[i] + self.FUTURE_REWARD_DISCOUNT * np.max(predicted_future_reward[i]))
 
         # perform gradient step
         self._train_operation.run(feed_dict={
-            self._output: y_batch,
-            self._action: a_batch,
-            self._input_layer: s_j_batch})
+            self._output: targets_batch,
+            self._action: actions_batch,
+            self._input_layer: last_states_batch})
+
+    @property
+    def _create_network(self):
+        # network weights
+        convolution_weights_1 = DeepQPongPlayer._weight_variable([8, 8, self.STATE_FRAMES, 32])
+        convolution_bias_1 = DeepQPongPlayer._bias_variable([32])
+
+        convolution_weights_2 = DeepQPongPlayer._weight_variable([4, 4, 32, 64])
+        convolution_bias_2 = DeepQPongPlayer._bias_variable([64])
+
+        convolution_weights_3 = DeepQPongPlayer._weight_variable([3, 3, 64, 64])
+        convolution_bias_3 = DeepQPongPlayer._bias_variable([64])
+
+        feed_forward_weights_1 = DeepQPongPlayer._weight_variable([1600, 512])
+        feed_forward_bias_1 = DeepQPongPlayer._bias_variable([512])
+
+        feed_forward_weights_2 = DeepQPongPlayer._weight_variable([512, self.ACTIONS_COUNT])
+        feed_forward_bias_2 = DeepQPongPlayer._bias_variable([self.ACTIONS_COUNT])
+
+        # input layer
+        input_placeholder = tf.placeholder("float", [None, self.RESIZED_SCREEN_X, self.RESIZED_SCREEN_Y,
+                                                     self.STATE_FRAMES])
+
+        # hidden layers
+        hidden_convolutional_layer_1 = tf.nn.relu(
+            DeepQPongPlayer._convolution_2d(input_placeholder, convolution_weights_1, 4) + convolution_bias_1)
+
+        hidden_max_pooling_layer = DeepQPongPlayer._max_pool_2x2(hidden_convolutional_layer_1)
+
+        hidden_convolutional_layer_2 = tf.nn.relu(
+            DeepQPongPlayer._convolution_2d(hidden_max_pooling_layer, convolution_weights_2, 2) + convolution_bias_2)
+
+        hidden_convolutional_layer_3 = tf.nn.relu(
+            DeepQPongPlayer._convolution_2d(hidden_convolutional_layer_2, convolution_weights_3, 1) + convolution_bias_3)
+
+        hidden_convolutional_layer_3_flat = tf.reshape(hidden_convolutional_layer_3, [-1, 1600])
+
+        final_hidden_activations = tf.nn.relu(
+            tf.matmul(hidden_convolutional_layer_3_flat, feed_forward_weights_1) + feed_forward_bias_1)
+
+        # readout layer
+        readout = tf.matmul(final_hidden_activations, feed_forward_weights_2) + feed_forward_bias_2
+
+        return input_placeholder, readout, final_hidden_activations
 
     @staticmethod
     def _key_presses_from_action(action_set):
@@ -149,52 +198,12 @@ class DeepQPongPlayer(PongPlayer):
         return tf.Variable(initial)
 
     @staticmethod
-    def _conv2d(x, W, stride):
-        return tf.nn.conv2d(x, W, strides=[1, stride, stride, 1], padding="SAME")
+    def _convolution_2d(x, weights, stride):
+        return tf.nn.conv2d(x, weights, strides=[1, stride, stride, 1], padding="SAME")
 
     @staticmethod
     def _max_pool_2x2(x):
         return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
-
-    def _create_network(self):
-        # network weights
-        convolution_weights_1 = DeepQPongPlayer._weight_variable([8, 8, self.STATE_FRAMES, 32])
-        convolution_bias_1 = DeepQPongPlayer._bias_variable([32])
-
-        convolution_weights_2 = DeepQPongPlayer._weight_variable([4, 4, 32, 64])
-        convolution_bias_2 = DeepQPongPlayer._bias_variable([64])
-
-        convolution_weights_3 = DeepQPongPlayer._weight_variable([3, 3, 64, 64])
-        convolution_bias_3 = DeepQPongPlayer._bias_variable([64])
-
-        feed_forward_weights_1 = DeepQPongPlayer._weight_variable([1600, 512])
-        feed_forward_bias_1 = DeepQPongPlayer._bias_variable([512])
-
-        feed_forward_weights_2 = DeepQPongPlayer._weight_variable([512, self.ACTIONS])
-        feed_forward_bias_2 = DeepQPongPlayer._bias_variable([self.ACTIONS])
-
-        # input layer
-        input = tf.placeholder("float", [None, self.RESIZED_SCREEN_X, self.RESIZED_SCREEN_Y, self.STATE_FRAMES])
-
-        # hidden layers
-        h_conv1 = tf.nn.relu(DeepQPongPlayer._conv2d(input, convolution_weights_1, 4) + convolution_bias_1)
-        h_pool1 = DeepQPongPlayer._max_pool_2x2(h_conv1)
-
-        h_conv2 = tf.nn.relu(DeepQPongPlayer._conv2d(h_pool1, convolution_weights_2, 2) + convolution_bias_2)
-        # h_pool2 = DeepQPongPlayer._max_pool_2x2(h_conv2)
-
-        h_conv3 = tf.nn.relu(DeepQPongPlayer._conv2d(h_conv2, convolution_weights_3, 1) + convolution_bias_3)
-        # h_pool3 = DeepQPongPlayer._max_pool_2x2(h_conv3)
-
-        # h_pool3_flat = tf.reshape(h_pool3, [-1, 256])
-        h_conv3_flat = tf.reshape(h_conv3, [-1, 1600])
-
-        final_hidden_activations = tf.nn.relu(tf.matmul(h_conv3_flat, feed_forward_weights_1) + feed_forward_bias_1)
-
-        # readout layer
-        readout = tf.matmul(final_hidden_activations, feed_forward_weights_2) + feed_forward_bias_2
-
-        return input, readout, final_hidden_activations
 
 
 if __name__ == '__main__':
