@@ -11,10 +11,10 @@ from pygame.constants import K_DOWN, K_UP
 class DeepQPongPlayer(PongPlayer):
     ACTIONS_COUNT = 3  # number of valid actions. In this case up, still and down
     FUTURE_REWARD_DISCOUNT = 0.99  # decay rate of past observations
-    OBSERVATION_STEPS = 500000.  # time steps to observe before training
+    OBSERVATION_STEPS = 1000.  # 500000.  # time steps to observe before training
     EXPLORE_STEPS = 2000000.  # frames over which to anneal epsilon
     INITIAL_RANDOM_ACTION_PROB = 1.0  # starting chance of an action being random
-    FINAL_RANDOM_ACTION_PROD = 0.05  # final chance of an action being random
+    FINAL_RANDOM_ACTION_PROB = 0.05  # final chance of an action being random
     REPLAY_MEMORY = 590000  # number of previous transitions to remember
     MINI_BATCH_SIZE = 32  # size of mini batches
     FRAMES_PER_ACTION = 4  # only select a new action every x frames, repeat prev for others
@@ -25,7 +25,7 @@ class DeepQPongPlayer(PongPlayer):
     def __init__(self):
         super(DeepQPongPlayer, self).__init__()
         self._session = tf.InteractiveSession()
-        self._input_layer, self._output_layer, hidden_activations = self._create_network
+        self._input_layer, self._output_layer, hidden_activations = DeepQPongPlayer._create_network()
 
         self._action = tf.placeholder("float", [None, self.ACTIONS_COUNT])
         self._output = tf.placeholder("float", [None])
@@ -88,11 +88,11 @@ class DeepQPongPlayer(PongPlayer):
 
             self._last_action = self._choose_next_action()
 
-            # scale down probability of random action
-            if self._probability_of_random_action > self.FINAL_RANDOM_ACTION_PROD \
+            # gradually reduce the probability of a random action
+            if self._probability_of_random_action > self.FINAL_RANDOM_ACTION_PROB \
                     and self._time > self.OBSERVATION_STEPS:
-                self._probability_of_random_action -= (self.INITIAL_RANDOM_ACTION_PROB - self.FINAL_RANDOM_ACTION_PROD) \
-                                                      / self.EXPLORE_STEPS
+                self._probability_of_random_action -= \
+                    (self.INITIAL_RANDOM_ACTION_PROB - self.FINAL_RANDOM_ACTION_PROB) / self.EXPLORE_STEPS
 
         return DeepQPongPlayer._key_presses_from_action(self._last_action)
 
@@ -114,29 +114,31 @@ class DeepQPongPlayer(PongPlayer):
         # sample a mini_batch to train on
         mini_batch = random.sample(self._previous_observations, self.MINI_BATCH_SIZE)
         # get the batch variables
-        last_states_batch = [d[self.OBS_LAST_STATE_INDEX] for d in mini_batch]
-        actions_batch = [d[self.OBS_ACTION_INDEX] for d in mini_batch]
-        rewards_batch = [d[self.OBS_REWARD_INDEX] for d in mini_batch]
-        current_states_batch = [d[self.OBS_CURRENT_STATE_INDEX] for d in mini_batch]
-        targets_batch = []
-        predicted_future_reward = self._output_layer.eval(feed_dict={self._input_layer: current_states_batch})
+        previous_states = [d[self.OBS_LAST_STATE_INDEX] for d in mini_batch]
+        actions = [d[self.OBS_ACTION_INDEX] for d in mini_batch]
+        rewards = [d[self.OBS_REWARD_INDEX] for d in mini_batch]
+        current_states = [d[self.OBS_CURRENT_STATE_INDEX] for d in mini_batch]
+        agents_expected_reward = []
+        # this gives us the agents expected reward for each action we might
+        agents_reward_per_action = self._output_layer.eval(feed_dict={self._input_layer: current_states})
         for i in range(len(mini_batch)):
             if mini_batch[i][self.OBS_TERMINAL_INDEX]:
                 # this was a terminal frame so need so scale future reward...
-                targets_batch.append(rewards_batch[i])
+                agents_expected_reward.append(rewards[i])
             else:
-                targets_batch.append(rewards_batch[i] + self.FUTURE_REWARD_DISCOUNT * np.max(predicted_future_reward[i]))
+                agents_expected_reward.append(
+                    rewards[i] + self.FUTURE_REWARD_DISCOUNT * np.max(agents_reward_per_action[i]))
 
-        # perform gradient step
+        # learn that these actions in these states lead to this reward
         self._train_operation.run(feed_dict={
-            self._output: targets_batch,
-            self._action: actions_batch,
-            self._input_layer: last_states_batch})
+            self._input_layer: previous_states,
+            self._action: actions,
+            self._output: agents_expected_reward})
 
-    @property
-    def _create_network(self):
+    @staticmethod
+    def _create_network():
         # network weights
-        convolution_weights_1 = DeepQPongPlayer._weight_variable([8, 8, self.STATE_FRAMES, 32])
+        convolution_weights_1 = DeepQPongPlayer._weight_variable([8, 8, DeepQPongPlayer.STATE_FRAMES, 32])
         convolution_bias_1 = DeepQPongPlayer._bias_variable([32])
 
         convolution_weights_2 = DeepQPongPlayer._weight_variable([4, 4, 32, 64])
@@ -148,12 +150,12 @@ class DeepQPongPlayer(PongPlayer):
         feed_forward_weights_1 = DeepQPongPlayer._weight_variable([1600, 512])
         feed_forward_bias_1 = DeepQPongPlayer._bias_variable([512])
 
-        feed_forward_weights_2 = DeepQPongPlayer._weight_variable([512, self.ACTIONS_COUNT])
-        feed_forward_bias_2 = DeepQPongPlayer._bias_variable([self.ACTIONS_COUNT])
+        feed_forward_weights_2 = DeepQPongPlayer._weight_variable([512, DeepQPongPlayer.ACTIONS_COUNT])
+        feed_forward_bias_2 = DeepQPongPlayer._bias_variable([DeepQPongPlayer.ACTIONS_COUNT])
 
         # input layer
-        input_placeholder = tf.placeholder("float", [None, self.RESIZED_SCREEN_X, self.RESIZED_SCREEN_Y,
-                                                     self.STATE_FRAMES])
+        input_placeholder = tf.placeholder("float", [None, DeepQPongPlayer.RESIZED_SCREEN_X, DeepQPongPlayer.RESIZED_SCREEN_Y,
+                                                     DeepQPongPlayer.STATE_FRAMES])
 
         # hidden layers
         hidden_convolutional_layer_1 = tf.nn.relu(
@@ -165,7 +167,8 @@ class DeepQPongPlayer(PongPlayer):
             DeepQPongPlayer._convolution_2d(hidden_max_pooling_layer, convolution_weights_2, 2) + convolution_bias_2)
 
         hidden_convolutional_layer_3 = tf.nn.relu(
-            DeepQPongPlayer._convolution_2d(hidden_convolutional_layer_2, convolution_weights_3, 1) + convolution_bias_3)
+            DeepQPongPlayer._convolution_2d(hidden_convolutional_layer_2, convolution_weights_3,
+                                            1) + convolution_bias_3)
 
         hidden_convolutional_layer_3_flat = tf.reshape(hidden_convolutional_layer_3, [-1, 1600])
 
