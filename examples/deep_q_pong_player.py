@@ -17,13 +17,12 @@ class DeepQPongPlayer(PongPlayer):
     FINAL_RANDOM_ACTION_PROB = 0.05  # final chance of an action being random
     REPLAY_MEMORY = 590000  # number of previous transitions to remember
     MINI_BATCH_SIZE = 32  # size of mini batches
-    FRAMES_PER_ACTION = 4  # only select a new action every x frames, repeat prev for others
     STATE_FRAMES = 4  # number of frames to store in the state
     RESIZED_SCREEN_X, RESIZED_SCREEN_Y = (80, 80)
     OBS_LAST_STATE_INDEX, OBS_ACTION_INDEX, OBS_REWARD_INDEX, OBS_CURRENT_STATE_INDEX, OBS_TERMINAL_INDEX = range(5)
 
     def __init__(self):
-        super(DeepQPongPlayer, self).__init__()
+        super(DeepQPongPlayer, self).__init__(force_game_fps=8)
         self._session = tf.Session()
         self._input_layer, self._output_layer = DeepQPongPlayer._create_network()
 
@@ -43,7 +42,6 @@ class DeepQPongPlayer(PongPlayer):
         self._last_state = None
         self._probability_of_random_action = self.INITIAL_RANDOM_ACTION_PROB
         self._time = 0
-        self._frames_since_last_action = 0
 
         self._session.run(tf.initialize_all_variables())
 
@@ -72,27 +70,21 @@ class DeepQPongPlayer(PongPlayer):
         if len(self._previous_observations) > self.REPLAY_MEMORY:
             self._previous_observations.popleft()
 
-        self._frames_since_last_action += 1
+        # only train if done observing
+        if self._time > self.OBSERVATION_STEPS:
+            self._train()
 
-        if self._frames_since_last_action >= self.FRAMES_PER_ACTION:
-            # select a new action
-            self._frames_since_last_action = 0
+        # update the old values
+        self._last_state = current_state
+        self._time += 1
 
-            # only train if done observing
-            if self._time > self.OBSERVATION_STEPS:
-                self._train()
+        self._last_action = self._choose_next_action()
 
-            # update the old values
-            self._last_state = current_state
-            self._time += 1
-
-            self._last_action = self._choose_next_action()
-
-            # gradually reduce the probability of a random action
-            if self._probability_of_random_action > self.FINAL_RANDOM_ACTION_PROB \
-                    and self._time > self.OBSERVATION_STEPS:
-                self._probability_of_random_action -= \
-                    (self.INITIAL_RANDOM_ACTION_PROB - self.FINAL_RANDOM_ACTION_PROB) / self.EXPLORE_STEPS
+        # gradually reduce the probability of a random action
+        if self._probability_of_random_action > self.FINAL_RANDOM_ACTION_PROB \
+                and self._time > self.OBSERVATION_STEPS:
+            self._probability_of_random_action -= \
+                (self.INITIAL_RANDOM_ACTION_PROB - self.FINAL_RANDOM_ACTION_PROB) / self.EXPLORE_STEPS
 
         return DeepQPongPlayer._key_presses_from_action(self._last_action)
 
@@ -104,7 +96,7 @@ class DeepQPongPlayer(PongPlayer):
             action_index = random.randrange(self.ACTIONS_COUNT)
         else:
             # choose an action given our last state
-            readout_t = self._output_layer.eval(feed_dict={self._input_layer: [self._last_state]})[0]
+            readout_t = self._session.run(self._output_layer, feed_dict={self._input_layer: [self._last_state]})[0]
             action_index = np.argmax(readout_t)
 
         new_action[action_index] = 1
@@ -120,7 +112,7 @@ class DeepQPongPlayer(PongPlayer):
         current_states = [d[self.OBS_CURRENT_STATE_INDEX] for d in mini_batch]
         agents_expected_reward = []
         # this gives us the agents expected reward for each action we might
-        agents_reward_per_action = self._output_layer.eval(feed_dict={self._input_layer: current_states})
+        agents_reward_per_action = self._session.run(self._output_layer, feed_dict={self._input_layer: current_states})
         for i in range(len(mini_batch)):
             if mini_batch[i][self.OBS_TERMINAL_INDEX]:
                 # this was a terminal frame so need so scale future reward...
@@ -130,10 +122,10 @@ class DeepQPongPlayer(PongPlayer):
                     rewards[i] + self.FUTURE_REWARD_DISCOUNT * np.max(agents_reward_per_action[i]))
 
         # learn that these actions in these states lead to this reward
-        self._train_operation.run(feed_dict={
-            self._input_layer: previous_states,
-            self._action: actions,
-            self._output: agents_expected_reward})
+        self._session.run(self._train_operation, feed_dict={
+                                self._input_layer: previous_states,
+                                self._action: actions,
+                                self._output: agents_expected_reward})
 
     @staticmethod
     def _create_network():

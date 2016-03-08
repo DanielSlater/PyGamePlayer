@@ -3,11 +3,11 @@ from pygame_player import PyGamePlayer
 
 
 class PongPlayer(PyGamePlayer):
-    def __init__(self):
+    def __init__(self, force_game_fps=10):
         """
         Example class for playing Pong
         """
-        super(PongPlayer, self).__init__(force_game_fps=10)
+        super(PongPlayer, self).__init__(force_game_fps=force_game_fps)
         self.last_bar1_score = 0.0
         self.last_bar2_score = 0.0
 
