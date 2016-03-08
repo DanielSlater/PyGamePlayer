@@ -24,8 +24,8 @@ class DeepQPongPlayer(PongPlayer):
 
     def __init__(self):
         super(DeepQPongPlayer, self).__init__()
-        self._session = tf.InteractiveSession()
-        self._input_layer, self._output_layer, hidden_activations = DeepQPongPlayer._create_network()
+        self._session = tf.Session()
+        self._input_layer, self._output_layer = DeepQPongPlayer._create_network()
 
         self._action = tf.placeholder("float", [None, self.ACTIONS_COUNT])
         self._output = tf.placeholder("float", [None])
@@ -58,7 +58,7 @@ class DeepQPongPlayer(PongPlayer):
 
         # first frame must be handled differently
         if self._last_state is None:
-            # the _last_state will contain the image data from the last self.STATE_FRAMES(4) frames
+            # the _last_state will contain the image data from the last self.STATE_FRAMES frames
             self._last_state = np.stack(tuple(screen_resized_grayscaled for _ in range(self.STATE_FRAMES)), axis=2)
             return DeepQPongPlayer._key_presses_from_action(self._last_action)
 
@@ -138,35 +138,37 @@ class DeepQPongPlayer(PongPlayer):
     @staticmethod
     def _create_network():
         # network weights
-        convolution_weights_1 = DeepQPongPlayer._weight_variable([8, 8, DeepQPongPlayer.STATE_FRAMES, 32])
-        convolution_bias_1 = DeepQPongPlayer._bias_variable([32])
+        convolution_weights_1 = tf.Variable(tf.truncated_normal([8, 8, DeepQPongPlayer.STATE_FRAMES, 32], stddev=0.01))
+        convolution_bias_1 = tf.Variable(tf.constant(0.01, shape=[32]))
 
-        convolution_weights_2 = DeepQPongPlayer._weight_variable([4, 4, 32, 64])
-        convolution_bias_2 = DeepQPongPlayer._bias_variable([64])
+        convolution_weights_2 = tf.Variable(tf.truncated_normal([4, 4, 32, 64], stddev=0.01))
+        convolution_bias_2 = tf.Variable(tf.constant(0.01, shape=[64]))
 
-        convolution_weights_3 = DeepQPongPlayer._weight_variable([3, 3, 64, 64])
-        convolution_bias_3 = DeepQPongPlayer._bias_variable([64])
+        convolution_weights_3 = tf.Variable(tf.truncated_normal([3, 3, 64, 64], stddev=0.01))
+        convolution_bias_3 = tf.Variable(tf.constant(0.01, shape=[64]))
 
-        feed_forward_weights_1 = DeepQPongPlayer._weight_variable([1600, 512])
-        feed_forward_bias_1 = DeepQPongPlayer._bias_variable([512])
+        feed_forward_weights_1 = tf.Variable(tf.truncated_normal([1600, 512], stddev=0.01))
+        feed_forward_bias_1 = tf.Variable(tf.constant(0.01, shape=[512]))
 
-        feed_forward_weights_2 = DeepQPongPlayer._weight_variable([512, DeepQPongPlayer.ACTIONS_COUNT])
-        feed_forward_bias_2 = DeepQPongPlayer._bias_variable([DeepQPongPlayer.ACTIONS_COUNT])
+        feed_forward_weights_2 = tf.Variable(tf.truncated_normal([512, DeepQPongPlayer.ACTIONS_COUNT], stddev=0.01))
+        feed_forward_bias_2 = tf.Variable(tf.constant(0.01, shape=[DeepQPongPlayer.ACTIONS_COUNT]))
 
         input_layer = tf.placeholder("float", [None, DeepQPongPlayer.RESIZED_SCREEN_X, DeepQPongPlayer.RESIZED_SCREEN_Y,
-                                                     DeepQPongPlayer.STATE_FRAMES])
+                                               DeepQPongPlayer.STATE_FRAMES])
 
         hidden_convolutional_layer_1 = tf.nn.relu(
-            DeepQPongPlayer._convolution_2d(input_layer, convolution_weights_1, 4) + convolution_bias_1)
+            tf.nn.conv2d(input_layer, convolution_weights_1, strides=[1, 4, 4, 1], padding="SAME") + convolution_bias_1)
 
-        hidden_max_pooling_layer = DeepQPongPlayer._max_pool_2x2(hidden_convolutional_layer_1)
+        hidden_max_pooling_layer = tf.nn.max_pool(hidden_convolutional_layer_1, ksize=[1, 2, 2, 1],
+                                                  strides=[1, 2, 2, 1], padding="SAME")
 
         hidden_convolutional_layer_2 = tf.nn.relu(
-            DeepQPongPlayer._convolution_2d(hidden_max_pooling_layer, convolution_weights_2, 2) + convolution_bias_2)
+            tf.nn.conv2d(hidden_max_pooling_layer, convolution_weights_2, strides=[1, 2, 2, 1],
+                         padding="SAME") + convolution_bias_2)
 
         hidden_convolutional_layer_3 = tf.nn.relu(
-            DeepQPongPlayer._convolution_2d(hidden_convolutional_layer_2, convolution_weights_3,
-                                            1) + convolution_bias_3)
+            tf.nn.conv2d(hidden_convolutional_layer_2, convolution_weights_3,
+                         strides=[1, 1, 1, 1], padding="SAME") + convolution_bias_3)
 
         hidden_convolutional_layer_3_flat = tf.reshape(hidden_convolutional_layer_3, [-1, 1600])
 
@@ -175,7 +177,7 @@ class DeepQPongPlayer(PongPlayer):
 
         output_layer = tf.matmul(final_hidden_activations, feed_forward_weights_2) + feed_forward_bias_2
 
-        return input_layer, output_layer, final_hidden_activations
+        return input_layer, output_layer
 
     @staticmethod
     def _key_presses_from_action(action_set):
@@ -188,22 +190,8 @@ class DeepQPongPlayer(PongPlayer):
         raise Exception("Unexpected action")
 
     @staticmethod
-    def _weight_variable(shape):
-        initial = tf.truncated_normal(shape, stddev=0.01)
-        return tf.Variable(initial)
-
-    @staticmethod
-    def _bias_variable(shape):
-        initial = tf.constant(0.01, shape=shape)
-        return tf.Variable(initial)
-
-    @staticmethod
     def _convolution_2d(x, weights, stride):
         return tf.nn.conv2d(x, weights, strides=[1, stride, stride, 1], padding="SAME")
-
-    @staticmethod
-    def _max_pool_2x2(x):
-        return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
 
 
 if __name__ == '__main__':
