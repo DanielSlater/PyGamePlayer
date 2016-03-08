@@ -189,10 +189,6 @@ class DeepQPongPlayer(PongPlayer):
             return [K_UP]
         raise Exception("Unexpected action")
 
-    @staticmethod
-    def _convolution_2d(x, weights, stride):
-        return tf.nn.conv2d(x, weights, strides=[1, stride, stride, 1], padding="SAME")
-
 
 if __name__ == '__main__':
     player = DeepQPongPlayer()
