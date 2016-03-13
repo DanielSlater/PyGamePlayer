@@ -15,7 +15,7 @@ class DeepQPongPlayer(PongPlayer):
     EXPLORE_STEPS = 2000000.  # frames over which to anneal epsilon
     INITIAL_RANDOM_ACTION_PROB = 1.0  # starting chance of an action being random
     FINAL_RANDOM_ACTION_PROB = 0.05  # final chance of an action being random
-    REPLAY_MEMORY = 590000  # number of previous transitions to remember
+    MEMORY_SIZE = 590000  # number of observations to remember
     MINI_BATCH_SIZE = 32  # size of mini batches
     STATE_FRAMES = 4  # number of frames to store in the state
     RESIZED_SCREEN_X, RESIZED_SCREEN_Y = (80, 80)
@@ -27,13 +27,14 @@ class DeepQPongPlayer(PongPlayer):
         self._input_layer, self._output_layer = DeepQPongPlayer._create_network()
 
         self._action = tf.placeholder("float", [None, self.ACTIONS_COUNT])
-        self._output = tf.placeholder("float", [None])
+        self._target = tf.placeholder("float", [None])
+
         readout_action = tf.reduce_sum(tf.mul(self._output_layer, self._action), reduction_indices=1)
-        cost = tf.reduce_mean(tf.square(self._output - readout_action))
+
+        cost = tf.reduce_mean(tf.square(self._target - readout_action))
         self._train_operation = tf.train.AdamOptimizer(1e-6).minimize(cost)
 
-        # store the previous observations in replay memory
-        self._previous_observations = deque()
+        self._observations = deque()
 
         # set the first action to do nothing
         self._last_action = np.zeros(self.ACTIONS_COUNT)
@@ -65,10 +66,10 @@ class DeepQPongPlayer(PongPlayer):
         current_state = np.append(screen_resized_grayscaled, self._last_state[:, :, 1:], axis=2)
 
         # store the transition in previous_observations
-        self._previous_observations.append((self._last_state, self._last_action, reward, current_state, terminal))
+        self._observations.append((self._last_state, self._last_action, reward, current_state, terminal))
 
-        if len(self._previous_observations) > self.REPLAY_MEMORY:
-            self._previous_observations.popleft()
+        if len(self._observations) > self.MEMORY_SIZE:
+            self._observations.popleft()
 
         # only train if done observing
         if self._time > self.OBSERVATION_STEPS:
@@ -104,7 +105,7 @@ class DeepQPongPlayer(PongPlayer):
 
     def _train(self):
         # sample a mini_batch to train on
-        mini_batch = random.sample(self._previous_observations, self.MINI_BATCH_SIZE)
+        mini_batch = random.sample(self._observations, self.MINI_BATCH_SIZE)
         # get the batch variables
         previous_states = [d[self.OBS_LAST_STATE_INDEX] for d in mini_batch]
         actions = [d[self.OBS_ACTION_INDEX] for d in mini_batch]
@@ -125,7 +126,7 @@ class DeepQPongPlayer(PongPlayer):
         self._session.run(self._train_operation, feed_dict={
                                 self._input_layer: previous_states,
                                 self._action: actions,
-                                self._output: agents_expected_reward})
+                                self._target: agents_expected_reward})
 
     @staticmethod
     def _create_network():
