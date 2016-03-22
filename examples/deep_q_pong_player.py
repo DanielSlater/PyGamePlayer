@@ -1,4 +1,5 @@
 # This is heavily based off https://github.com/asrivat1/DeepLearningVideoGames
+import os
 import random
 from collections import deque
 from pong_player import PongPlayer
@@ -20,9 +21,22 @@ class DeepQPongPlayer(PongPlayer):
     STATE_FRAMES = 4  # number of frames to store in the state
     RESIZED_SCREEN_X, RESIZED_SCREEN_Y = (80, 80)
     OBS_LAST_STATE_INDEX, OBS_ACTION_INDEX, OBS_REWARD_INDEX, OBS_CURRENT_STATE_INDEX, OBS_TERMINAL_INDEX = range(5)
+    SAVE_EVERY_X_STEPS = 10000
+    LEARN_RATE = 1e-6
+    STORE_SCORES_LEN = 200.
 
-    def __init__(self):
-        super(DeepQPongPlayer, self).__init__(force_game_fps=8)
+    def __init__(self, checkpoint_path="deep_q_pong_networks_simple", playback_mode=False):
+        """
+        Example of deep q network for pong
+
+        :param checkpoint_path: directory to store checkpoints in
+        :type checkpoint_path: str
+        :param playback_mode: if true games runs in real time mode and demos itself running
+        :type playback_mode: bool
+        """
+        self._playback_mode = playback_mode
+        super(DeepQPongPlayer, self).__init__(force_game_fps=8, run_real_time=playback_mode)
+        self._checkpoint_path = checkpoint_path
         self._session = tf.Session()
         self._input_layer, self._output_layer = DeepQPongPlayer._create_network()
 
@@ -32,9 +46,10 @@ class DeepQPongPlayer(PongPlayer):
         readout_action = tf.reduce_sum(tf.mul(self._output_layer, self._action), reduction_indices=1)
 
         cost = tf.reduce_mean(tf.square(self._target - readout_action))
-        self._train_operation = tf.train.AdamOptimizer(1e-6).minimize(cost)
+        self._train_operation = tf.train.AdamOptimizer(self.LEARN_RATE).minimize(cost)
 
         self._observations = deque()
+        self._last_scores = deque()
 
         # set the first action to do nothing
         self._last_action = np.zeros(self.ACTIONS_COUNT)
@@ -46,6 +61,17 @@ class DeepQPongPlayer(PongPlayer):
 
         self._session.run(tf.initialize_all_variables())
 
+        if not os.path.exists(self._checkpoint_path):
+            os.mkdir(self._checkpoint_path)
+        self._saver = tf.train.Saver()
+        checkpoint = tf.train.get_checkpoint_state(self._checkpoint_path)
+
+        if checkpoint and checkpoint.model_checkpoint_path:
+            self._saver.restore(self._session, checkpoint.model_checkpoint_path)
+            print("Loaded checkpoints %s" % checkpoint.model_checkpoint_path)
+        if playback_mode:
+            raise Exception("Could not load checkpoints for playback")
+
     def get_keys_pressed(self, screen_array, reward, terminal):
         # scale down game image
         screen_resized_grayscaled = cv2.cvtColor(cv2.resize(screen_array,
@@ -54,6 +80,11 @@ class DeepQPongPlayer(PongPlayer):
 
         # set the grayscale to have values in the 0.0 to 1.0 range
         ret, screen_resized_grayscaled = cv2.threshold(screen_resized_grayscaled, 1, 255, cv2.THRESH_BINARY)
+
+        if reward != 0.0:
+            self._last_scores.append(reward)
+            if len(self._last_scores) > self.STORE_SCORES_LEN:
+                self._last_scores.popleft()
 
         # first frame must be handled differently
         if self._last_state is None:
@@ -65,34 +96,40 @@ class DeepQPongPlayer(PongPlayer):
                                                (self.RESIZED_SCREEN_X, self.RESIZED_SCREEN_Y, 1))
         current_state = np.append(screen_resized_grayscaled, self._last_state[:, :, 1:], axis=2)
 
-        # store the transition in previous_observations
-        self._observations.append((self._last_state, self._last_action, reward, current_state, terminal))
+        if not self._playback_mode:
+            # store the transition in previous_observations
+            self._observations.append((self._last_state, self._last_action, reward, current_state, terminal))
 
-        if len(self._observations) > self.MEMORY_SIZE:
-            self._observations.popleft()
+            if len(self._observations) > self.MEMORY_SIZE:
+                self._observations.popleft()
 
-        # only train if done observing
-        if self._time > self.OBSERVATION_STEPS:
-            self._train()
+            # only train if done observing
+            if len(self._observations) > self.OBSERVATION_STEPS:
+                self._train()
+                self._time += 1
 
         # update the old values
         self._last_state = current_state
-        self._time += 1
 
         self._last_action = self._choose_next_action()
 
-        # gradually reduce the probability of a random action
-        if self._probability_of_random_action > self.FINAL_RANDOM_ACTION_PROB \
-                and self._time > self.OBSERVATION_STEPS:
-            self._probability_of_random_action -= \
-                (self.INITIAL_RANDOM_ACTION_PROB - self.FINAL_RANDOM_ACTION_PROB) / self.EXPLORE_STEPS
+        if not self._playback_mode:
+            # gradually reduce the probability of a random actionself.
+            if self._probability_of_random_action > self.FINAL_RANDOM_ACTION_PROB \
+                    and len(self._observations) > self.OBSERVATION_STEPS:
+                self._probability_of_random_action -= \
+                    (self.INITIAL_RANDOM_ACTION_PROB - self.FINAL_RANDOM_ACTION_PROB) / self.EXPLORE_STEPS
+
+            print("Time: %s random_action_prob: %s reward %s scores differential %s" %
+                  (self._time, self._probability_of_random_action, reward,
+                   sum(self._last_scores) / self.STORE_SCORES_LEN))
 
         return DeepQPongPlayer._key_presses_from_action(self._last_action)
 
     def _choose_next_action(self):
         new_action = np.zeros([self.ACTIONS_COUNT])
 
-        if self._time <= self.OBSERVATION_STEPS or random.random() <= self._probability_of_random_action:
+        if self._playback_mode or (random.random() <= self._probability_of_random_action):
             # choose an action randomly
             action_index = random.randrange(self.ACTIONS_COUNT)
         else:
@@ -124,9 +161,13 @@ class DeepQPongPlayer(PongPlayer):
 
         # learn that these actions in these states lead to this reward
         self._session.run(self._train_operation, feed_dict={
-                                self._input_layer: previous_states,
-                                self._action: actions,
-                                self._target: agents_expected_reward})
+            self._input_layer: previous_states,
+            self._action: actions,
+            self._target: agents_expected_reward})
+
+        # save checkpoints for later
+        if self._time % self.SAVE_EVERY_X_STEPS == 0:
+            self._saver.save(self._session, self._checkpoint_path + '/network', global_step=self._time)
 
     @staticmethod
     def _create_network():
@@ -140,10 +181,10 @@ class DeepQPongPlayer(PongPlayer):
         convolution_weights_3 = tf.Variable(tf.truncated_normal([3, 3, 64, 64], stddev=0.01))
         convolution_bias_3 = tf.Variable(tf.constant(0.01, shape=[64]))
 
-        feed_forward_weights_1 = tf.Variable(tf.truncated_normal([1600, 512], stddev=0.01))
-        feed_forward_bias_1 = tf.Variable(tf.constant(0.01, shape=[512]))
+        feed_forward_weights_1 = tf.Variable(tf.truncated_normal([1600, 256], stddev=0.01))
+        feed_forward_bias_1 = tf.Variable(tf.constant(0.01, shape=[256]))
 
-        feed_forward_weights_2 = tf.Variable(tf.truncated_normal([512, DeepQPongPlayer.ACTIONS_COUNT], stddev=0.01))
+        feed_forward_weights_2 = tf.Variable(tf.truncated_normal([256, DeepQPongPlayer.ACTIONS_COUNT], stddev=0.01))
         feed_forward_bias_2 = tf.Variable(tf.constant(0.01, shape=[DeepQPongPlayer.ACTIONS_COUNT]))
 
         input_layer = tf.placeholder("float", [None, DeepQPongPlayer.RESIZED_SCREEN_X, DeepQPongPlayer.RESIZED_SCREEN_Y,
