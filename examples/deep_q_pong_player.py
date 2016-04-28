@@ -69,7 +69,7 @@ class DeepQPongPlayer(PongPlayer):
         if checkpoint and checkpoint.model_checkpoint_path:
             self._saver.restore(self._session, checkpoint.model_checkpoint_path)
             print("Loaded checkpoints %s" % checkpoint.model_checkpoint_path)
-        if playback_mode:
+        elif playback_mode:
             raise Exception("Could not load checkpoints for playback")
 
     def get_keys_pressed(self, screen_array, reward, terminal):
