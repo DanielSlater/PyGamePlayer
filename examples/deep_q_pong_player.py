@@ -25,7 +25,7 @@ class DeepQPongPlayer(PongPlayer):
     LEARN_RATE = 1e-6
     STORE_SCORES_LEN = 200.
 
-    def __init__(self, checkpoint_path="deep_q_pong_networks_simple", playback_mode=False):
+    def __init__(self, checkpoint_path="deep_q_pong_networks_with_pooling", playback_mode=False):
         """
         Example of deep q network for pong
 
@@ -181,7 +181,7 @@ class DeepQPongPlayer(PongPlayer):
         convolution_weights_3 = tf.Variable(tf.truncated_normal([3, 3, 64, 64], stddev=0.01))
         convolution_bias_3 = tf.Variable(tf.constant(0.01, shape=[64]))
 
-        feed_forward_weights_1 = tf.Variable(tf.truncated_normal([1600, 256], stddev=0.01))
+        feed_forward_weights_1 = tf.Variable(tf.truncated_normal([256, 256], stddev=0.01))
         feed_forward_bias_1 = tf.Variable(tf.constant(0.01, shape=[256]))
 
         feed_forward_weights_2 = tf.Variable(tf.truncated_normal([256, DeepQPongPlayer.ACTIONS_COUNT], stddev=0.01))
@@ -193,18 +193,24 @@ class DeepQPongPlayer(PongPlayer):
         hidden_convolutional_layer_1 = tf.nn.relu(
             tf.nn.conv2d(input_layer, convolution_weights_1, strides=[1, 4, 4, 1], padding="SAME") + convolution_bias_1)
 
-        hidden_max_pooling_layer = tf.nn.max_pool(hidden_convolutional_layer_1, ksize=[1, 2, 2, 1],
+        hidden_max_pooling_layer_1 = tf.nn.max_pool(hidden_convolutional_layer_1, ksize=[1, 2, 2, 1],
                                                   strides=[1, 2, 2, 1], padding="SAME")
 
         hidden_convolutional_layer_2 = tf.nn.relu(
-            tf.nn.conv2d(hidden_max_pooling_layer, convolution_weights_2, strides=[1, 2, 2, 1],
+            tf.nn.conv2d(hidden_max_pooling_layer_1, convolution_weights_2, strides=[1, 2, 2, 1],
                          padding="SAME") + convolution_bias_2)
 
+        hidden_max_pooling_layer_2 = tf.nn.max_pool(hidden_convolutional_layer_2, ksize=[1, 2, 2, 1],
+                                                  strides=[1, 2, 2, 1], padding="SAME")
+
         hidden_convolutional_layer_3 = tf.nn.relu(
-            tf.nn.conv2d(hidden_convolutional_layer_2, convolution_weights_3,
+            tf.nn.conv2d(hidden_max_pooling_layer_2, convolution_weights_3,
                          strides=[1, 1, 1, 1], padding="SAME") + convolution_bias_3)
 
-        hidden_convolutional_layer_3_flat = tf.reshape(hidden_convolutional_layer_3, [-1, 1600])
+        hidden_max_pooling_layer_3 = tf.nn.max_pool(hidden_convolutional_layer_3, ksize=[1, 2, 2, 1],
+                                                  strides=[1, 2, 2, 1], padding="SAME")
+
+        hidden_convolutional_layer_3_flat = tf.reshape(hidden_max_pooling_layer_3, [-1, 256])
 
         final_hidden_activations = tf.nn.relu(
             tf.matmul(hidden_convolutional_layer_3_flat, feed_forward_weights_1) + feed_forward_bias_1)
