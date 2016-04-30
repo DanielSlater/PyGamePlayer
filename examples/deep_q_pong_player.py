@@ -12,12 +12,12 @@ from pygame.constants import K_DOWN, K_UP
 class DeepQPongPlayer(PongPlayer):
     ACTIONS_COUNT = 3  # number of valid actions. In this case up, still and down
     FUTURE_REWARD_DISCOUNT = 0.99  # decay rate of past observations
-    OBSERVATION_STEPS = 500000.  # time steps to observe before training
-    EXPLORE_STEPS = 2000000.  # frames over which to anneal epsilon
+    OBSERVATION_STEPS = 50000.  # time steps to observe before training
+    EXPLORE_STEPS = 500000.  # frames over which to anneal epsilon
     INITIAL_RANDOM_ACTION_PROB = 1.0  # starting chance of an action being random
     FINAL_RANDOM_ACTION_PROB = 0.05  # final chance of an action being random
-    MEMORY_SIZE = 590000  # number of observations to remember
-    MINI_BATCH_SIZE = 32  # size of mini batches
+    MEMORY_SIZE = 500000  # number of observations to remember
+    MINI_BATCH_SIZE = 100  # size of mini batches
     STATE_FRAMES = 4  # number of frames to store in the state
     RESIZED_SCREEN_X, RESIZED_SCREEN_Y = (80, 80)
     OBS_LAST_STATE_INDEX, OBS_ACTION_INDEX, OBS_REWARD_INDEX, OBS_CURRENT_STATE_INDEX, OBS_TERMINAL_INDEX = range(5)
@@ -25,7 +25,7 @@ class DeepQPongPlayer(PongPlayer):
     LEARN_RATE = 1e-6
     STORE_SCORES_LEN = 200.
 
-    def __init__(self, checkpoint_path="deep_q_pong_networks_with_pooling", playback_mode=False):
+    def __init__(self, checkpoint_path="deep_q_pong_networks", playback_mode=False, verbose_logging=False):
         """
         Example of deep q network for pong
 
@@ -33,9 +33,12 @@ class DeepQPongPlayer(PongPlayer):
         :type checkpoint_path: str
         :param playback_mode: if true games runs in real time mode and demos itself running
         :type playback_mode: bool
+        :param verbose_logging: If true then extra log information is printed to std out
+        :type verbose_logging: bool
         """
         self._playback_mode = playback_mode
         super(DeepQPongPlayer, self).__init__(force_game_fps=8, run_real_time=playback_mode)
+        self.verbose_logging = verbose_logging
         self._checkpoint_path = checkpoint_path
         self._session = tf.Session()
         self._input_layer, self._output_layer = DeepQPongPlayer._create_network()
@@ -135,6 +138,8 @@ class DeepQPongPlayer(PongPlayer):
         else:
             # choose an action given our last state
             readout_t = self._session.run(self._output_layer, feed_dict={self._input_layer: [self._last_state]})[0]
+            if self.verbose_logging:
+                print("Action Q-Values are %s" % readout_t)
             action_index = np.argmax(readout_t)
 
         new_action[action_index] = 1
@@ -153,7 +158,7 @@ class DeepQPongPlayer(PongPlayer):
         agents_reward_per_action = self._session.run(self._output_layer, feed_dict={self._input_layer: current_states})
         for i in range(len(mini_batch)):
             if mini_batch[i][self.OBS_TERMINAL_INDEX]:
-                # this was a terminal frame so need so scale future reward...
+                # this was a terminal frame so there is no future reward...
                 agents_expected_reward.append(rewards[i])
             else:
                 agents_expected_reward.append(
@@ -194,21 +199,21 @@ class DeepQPongPlayer(PongPlayer):
             tf.nn.conv2d(input_layer, convolution_weights_1, strides=[1, 4, 4, 1], padding="SAME") + convolution_bias_1)
 
         hidden_max_pooling_layer_1 = tf.nn.max_pool(hidden_convolutional_layer_1, ksize=[1, 2, 2, 1],
-                                                  strides=[1, 2, 2, 1], padding="SAME")
+                                                    strides=[1, 2, 2, 1], padding="SAME")
 
         hidden_convolutional_layer_2 = tf.nn.relu(
             tf.nn.conv2d(hidden_max_pooling_layer_1, convolution_weights_2, strides=[1, 2, 2, 1],
                          padding="SAME") + convolution_bias_2)
 
         hidden_max_pooling_layer_2 = tf.nn.max_pool(hidden_convolutional_layer_2, ksize=[1, 2, 2, 1],
-                                                  strides=[1, 2, 2, 1], padding="SAME")
+                                                    strides=[1, 2, 2, 1], padding="SAME")
 
         hidden_convolutional_layer_3 = tf.nn.relu(
             tf.nn.conv2d(hidden_max_pooling_layer_2, convolution_weights_3,
                          strides=[1, 1, 1, 1], padding="SAME") + convolution_bias_3)
 
         hidden_max_pooling_layer_3 = tf.nn.max_pool(hidden_convolutional_layer_3, ksize=[1, 2, 2, 1],
-                                                  strides=[1, 2, 2, 1], padding="SAME")
+                                                    strides=[1, 2, 2, 1], padding="SAME")
 
         hidden_convolutional_layer_3_flat = tf.reshape(hidden_max_pooling_layer_3, [-1, 256])
 
@@ -232,7 +237,4 @@ class DeepQPongPlayer(PongPlayer):
 
 if __name__ == '__main__':
     player = DeepQPongPlayer()
-    player.playing = True
-
-    # importing pong will start the game playing
-    import games.pong
+    player.start()
