@@ -77,11 +77,11 @@ def run(screen_width=400., screen_height=400.):
         elif bar1_y <= bar_dist_from_edge:
             bar1_y = bar_dist_from_edge
 
-        if circle_x <= bar1_x + bar_dist_from_edge:
-            if circle_y >= bar1_y - circle_radius and circle_y <= bar1_y + (bar_height - circle_radius):
+        if circle_x < bar_dist_from_edge + bar_width:
+            if circle_y >= bar1_y - circle_radius and circle_y <= bar1_y + bar_height + circle_radius:
                 circle_x = bar_dist_from_edge + bar_width
                 speed_x = -speed_x
-        if circle_x < 0.:
+        if circle_x < -circle_radius:
             score -= 1
             circle_x, circle_y = circle_start_x, circle_start_y
             bar1_y, bar_2_y = bar_start_y, bar_start_y
