@@ -59,9 +59,6 @@ class PongPlayer(PyGamePlayer):
 if __name__ == '__main__':
     player = PongPlayer()
     player.start()
-
-    # importing pong will start the game playing
-    import games.pong
 ```
 
 Games
