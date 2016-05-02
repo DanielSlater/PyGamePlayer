@@ -101,11 +101,11 @@ def run(screen_width=40., screen_height=40.):
             if circle_y >= bar2_y - circle_radius and circle_y <= bar2_y + (bar_height - circle_radius):
                 circle_x = screen_width - bar_dist_from_edge - bar_width - circle_diameter
                 speed_x = -speed_x
-        if circle_x < 0.:
+        if circle_x < -circle_radius:
             bar2_score += 1
             circle_x, circle_y = (screen_width + circle_diameter) / 2., circle_start_y
             bar1_y, bar_2_y = bar_start_y, bar_start_y
-        elif circle_x > screen_width:
+        elif circle_x > screen_width - circle_diameter:
             bar1_score += 1
             circle_x, circle_y = circle_start_x, circle_start_y
             bar1_y, bar2_y = bar_start_y, bar_start_y
