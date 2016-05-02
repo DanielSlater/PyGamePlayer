@@ -46,6 +46,11 @@ class TetrisPlayer(PyGamePlayer):
         self._terminal = False
         return temp, terminal
 
-if __name__ == '__main__':
-    with TetrisPlayer():
+    def start(self):
+        super(TetrisPlayer, self).start()
+
         games.tetris.main()
+
+if __name__ == '__main__':
+    player = TetrisPlayer()
+    player.start()
