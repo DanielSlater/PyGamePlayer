@@ -15,13 +15,13 @@ Getting started
 -----------
 PyGame is probably the best supported library for games in Python it can be downloaded and installed from http://www.pygame.org/download.shtml
 
-Numpy is also required http://www.scipy.org/scipylib/download.html
+[Numpy](http://www.scipy.org/scipylib/download.html) is also required
 
 Create a Python 2 or 3 environment with both of these in it.
 
 Import this project and whatever PyGame game you want to train against into your working area. A bunch of PyGame games can be found here http://www.pygame.org/projects/6 or alternatly just use Pong or Tetris that are included with this project.
 
-exmples/deep_q_pong_player.py also requires that tensorflow and matplotlib be installed
+[exmples/deep_q_pong_player.py](https://github.com/DanielSlater/PyGamePlayer/blob/master/examples/deep_q_pong_player.py) also requires that [tensorflow](https://www.tensorflow.org/versions/r0.8/get_started/os_setup.html) and [matplotlib](http://matplotlib.org/users/installing.html) be installed
 
 Example usage for Pong game
 -----------
@@ -63,3 +63,10 @@ if __name__ == '__main__':
     # importing pong will start the game playing
     import games.pong
 ```
+
+Games
+--------
+- [Pong](https://github.com/DanielSlater/PyGamePlayer/blob/master/games/pong.py)
+- [Tetris](https://github.com/DanielSlater/PyGamePlayer/blob/master/games/tetris.py)
+- [Mini Pong](https://github.com/DanielSlater/PyGamePlayer/blob/master/games/mini_pong.py) - modified version of pong to run in lower resolutions
+- [Half Pong](https://github.com/DanielSlater/PyGamePlayer/blob/master/games/half_pong.py) - simplified version of pong with just one bar 
