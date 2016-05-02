@@ -76,13 +76,13 @@ class DeepQPongPlayer(PongPlayer):
             raise Exception("Could not load checkpoints for playback")
 
     def get_keys_pressed(self, screen_array, reward, terminal):
-        # scale down game image
+        # scale down screen image
         screen_resized_grayscaled = cv2.cvtColor(cv2.resize(screen_array,
                                                             (self.RESIZED_SCREEN_X, self.RESIZED_SCREEN_Y)),
                                                  cv2.COLOR_BGR2GRAY)
 
-        # set the grayscale to have values in the 0.0 to 1.0 range
-        ret, screen_resized_grayscaled = cv2.threshold(screen_resized_grayscaled, 1, 255, cv2.THRESH_BINARY)
+        # set the pixels to all be 0. or 1.
+        _, screen_resized_binary = cv2.threshold(screen_resized_grayscaled, 1, 255, cv2.THRESH_BINARY)
 
         if reward != 0.0:
             self._last_scores.append(reward)
@@ -92,12 +92,12 @@ class DeepQPongPlayer(PongPlayer):
         # first frame must be handled differently
         if self._last_state is None:
             # the _last_state will contain the image data from the last self.STATE_FRAMES frames
-            self._last_state = np.stack(tuple(screen_resized_grayscaled for _ in range(self.STATE_FRAMES)), axis=2)
+            self._last_state = np.stack(tuple(screen_resized_binary for _ in range(self.STATE_FRAMES)), axis=2)
             return DeepQPongPlayer._key_presses_from_action(self._last_action)
 
-        screen_resized_grayscaled = np.reshape(screen_resized_grayscaled,
+        screen_resized_binary = np.reshape(screen_resized_binary,
                                                (self.RESIZED_SCREEN_X, self.RESIZED_SCREEN_Y, 1))
-        current_state = np.append(screen_resized_grayscaled, self._last_state[:, :, 1:], axis=2)
+        current_state = np.append(self._last_state[:, :, 1:], screen_resized_binary, axis=2)
 
         if not self._playback_mode:
             # store the transition in previous_observations
