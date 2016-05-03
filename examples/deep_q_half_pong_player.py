@@ -1,7 +1,7 @@
 # This is heavily based off https://github.com/asrivat1/DeepLearningVideoGames
 # deep q learning agent that runs against Half-Pong. Runs on a much smaller screen and with fewer layers.
 # Performs significantly above random, but still has someway to go to match google deep mind performance...
-# To see a trained version of this network start it with the kwargs checkpoint_path="deep_q_half_pong_networks_40x40_6"
+# To see a trained version of this network start it with the kwargs checkpoint_path="deep_q_half_pong_networks_40x40_8"
 # and playback_mode="True"
 
 import os
@@ -37,7 +37,7 @@ class DeepQHalfPongPlayer(PyGamePlayer):
                  # to see a trained network change checkpoint_path="deep_q_half_pong_networks_40x40_8" and
                  # playback_mode="True"
                  checkpoint_path="deep_q_half_pong_networks",
-                 playback_mode=False,
+                 playback_mode=True,
                  verbose_logging=True):
         """
         Example of deep q network for pong
@@ -250,7 +250,7 @@ class DeepQHalfPongPlayer(PyGamePlayer):
 
 
 if __name__ == '__main__':
-    # to see a trained network add the args checkpoint_path="deep_q_half_pong_networks_40x40_6" and
+    # to see a trained network add the args checkpoint_path="deep_q_half_pong_networks_40x40_8" and
     # playback_mode="True"
     player = DeepQHalfPongPlayer()
     player.start()
