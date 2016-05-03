@@ -34,7 +34,7 @@ class DeepQHalfPongPlayer(PyGamePlayer):
     SCREEN_HEIGHT = 40
 
     def __init__(self,
-                 # to see a trained network change checkpoint_path="deep_q_half_pong_networks_40x40_6" and
+                 # to see a trained network change checkpoint_path="deep_q_half_pong_networks_40x40_8" and
                  # playback_mode="True"
                  checkpoint_path="deep_q_half_pong_networks",
                  playback_mode=False,
@@ -51,7 +51,7 @@ class DeepQHalfPongPlayer(PyGamePlayer):
         """
         self._playback_mode = playback_mode
         self.last_score = 0
-        super(DeepQHalfPongPlayer, self).__init__(force_game_fps=6, run_real_time=playback_mode)
+        super(DeepQHalfPongPlayer, self).__init__(force_game_fps=8, run_real_time=playback_mode)
         self.verbose_logging = verbose_logging
         self._checkpoint_path = checkpoint_path
         self._session = tf.Session()
@@ -142,7 +142,7 @@ class DeepQHalfPongPlayer(PyGamePlayer):
     def _choose_next_action(self):
         new_action = np.zeros([self.ACTIONS_COUNT])
 
-        if self._playback_mode or (random.random() <= self._probability_of_random_action):
+        if (not self._playback_mode) and (random.random() <= self._probability_of_random_action):
             # choose an action randomly
             action_index = random.randrange(self.ACTIONS_COUNT)
         else:

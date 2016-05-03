@@ -132,7 +132,7 @@ class DeepQPongPlayer(PongPlayer):
     def _choose_next_action(self):
         new_action = np.zeros([self.ACTIONS_COUNT])
 
-        if self._playback_mode or (random.random() <= self._probability_of_random_action):
+        if (not self._playback_mode) and (random.random() <= self._probability_of_random_action):
             # choose an action randomly
             action_index = random.randrange(self.ACTIONS_COUNT)
         else:
