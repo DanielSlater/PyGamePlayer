@@ -1,6 +1,6 @@
 import pygame
 import numpy  # import is unused but required or we fail later
-from pygame.constants import K_DOWN, KEYDOWN, KEYUP, QUIT
+from pygame.constants import K_DOWN, K_UP, KEYDOWN, KEYUP, QUIT
 import pygame.surfarray
 import pygame.key
 
@@ -154,10 +154,12 @@ class PyGamePlayer(object):
         self._game_time += self.get_ms_per_frame()
 
     def _on_event_get(self, _, *args, **kwargs):
-        key_down_events = [pygame.event.Event(KEYDOWN, {"key": x})
-                           for x in self._keys_pressed if x not in self._last_keys_pressed]
-        key_up_events = [pygame.event.Event(KEYUP, {"key": x})
-                         for x in self._last_keys_pressed if x not in self._keys_pressed]
+        key_up_events = []
+        if len(self._last_keys_pressed) > 0:
+            diff_list = list(set( self._last_keys_pressed) - set(self._keys_pressed))
+            key_up_events = [pygame.event.Event(KEYUP, {"key": x}) for x in diff_list] 
+
+        key_down_events = [pygame.event.Event(KEYDOWN, {"key": x}) for x in self._keys_pressed]
 
         result = []
 
